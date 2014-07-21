@@ -24,6 +24,7 @@ module Main (C:CONSOLE) (FS:KV_RO) (S:Cohttp_lwt.Server) = struct
         | [] | [""] -> []
         | hd::tl -> hd :: aux tl
       in
+      Printf.printf "[DEBUG] URI=%s\n" path;
       List.filter (fun e -> e <> "")
         (aux (Re_str.(split_delim (regexp_string "/") path)))
     in
@@ -36,6 +37,7 @@ module Main (C:CONSOLE) (FS:KV_RO) (S:Cohttp_lwt.Server) = struct
         try_lwt
           read_fs path
           >>= fun body ->
+          Printf.printf "[DEBUG] Start respond_string w/ size=%d\n" (String.length body);
           S.respond_string ~status:`OK ~body ()
         with exn ->
           S.respond_not_found ()
@@ -50,6 +52,7 @@ module Main (C:CONSOLE) (FS:KV_RO) (S:Cohttp_lwt.Server) = struct
       let cid = Cohttp.Connection.to_string conn_id in
       C.log c (Printf.sprintf "conn %s closed" cid)
     in
+    C.log c "[DEBUG] Start listening on port 80...";
     http { S.callback; conn_closed }
 
 end
