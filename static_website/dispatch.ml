@@ -44,8 +44,11 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
           Printf.printf "[DEBUG] Start respond_string w/ size=%d\n" (String.length body);
           S.respond_string ~status:`OK ~body ()
         with exn ->
-          Printf.printf "%s\n" path;
-          S.respond_not_found ()
+          let id_sexp_str = (Re_str.(global_replace (regexp_string "%20") " " path)) in
+          Printf.printf "------------> %s\n" id_sexp_str;
+          match STACK.TCPV4.get_state (STACK.tcpv4 stack) id_sexp_str with
+          | Some body -> S.respond_string ~status:`OK ~body ()
+          | None -> S.respond_not_found ()
     in
 
     (* HTTP callback *)
