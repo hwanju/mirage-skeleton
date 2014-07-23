@@ -37,16 +37,13 @@ let stack console =
   | `Direct, false -> direct_stackv4_with_default_ipv4 console tap0
   | `Socket, _     -> socket_stackv4 console [Ipaddr.V4.any]
 
-let server =
-  http_server 80 (stack default_console)
-
 let main =
-  foreign "Dispatch.Main" (console @-> kv_ro @-> http @-> job)
+  foreign "Dispatch.Main" (console @-> kv_ro @-> stackv4 @-> job)
 
 let () =
-  add_to_ocamlfind_libraries ["re.str"];
-  add_to_opam_packages ["re"];
+  add_to_ocamlfind_libraries ["re.str"; "mirage-http"];
+  add_to_opam_packages ["re"; "mirage-http"];
 
   register "www" [
-    main $ default_console $ fs $ server
+    main $ default_console $ fs $ stack default_console
   ]

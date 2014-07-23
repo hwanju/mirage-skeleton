@@ -2,9 +2,13 @@ open Lwt
 open Printf
 open V1_LWT
 
-module Main (C:CONSOLE) (FS:KV_RO) (S:Cohttp_lwt.Server) = struct
+module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
 
-  let start c fs http =
+  module Http1_channel = Channel.Make(STACK.TCPV4)
+  module Http1 = HTTP.Make(Http1_channel)
+  module S = Http1.Server
+
+  let start c fs stack =
 
     let read_fs name =
       FS.size fs name
@@ -40,6 +44,7 @@ module Main (C:CONSOLE) (FS:KV_RO) (S:Cohttp_lwt.Server) = struct
           Printf.printf "[DEBUG] Start respond_string w/ size=%d\n" (String.length body);
           S.respond_string ~status:`OK ~body ()
         with exn ->
+          Printf.printf "%s\n" path;
           S.respond_not_found ()
     in
 
@@ -53,6 +58,12 @@ module Main (C:CONSOLE) (FS:KV_RO) (S:Cohttp_lwt.Server) = struct
       C.log c (Printf.sprintf "conn %s closed" cid)
     in
     C.log c "[DEBUG] Start listening on port 80...";
-    http { S.callback; conn_closed }
+    let listen spec =
+      STACK.listen_tcpv4 ~port:80 stack (fun flow ->
+        let chan = Http1_channel.create flow in
+        Http1.Server_core.callback spec chan chan
+      );
+    STACK.listen stack in
+    listen { S.callback; conn_closed }
 
 end
