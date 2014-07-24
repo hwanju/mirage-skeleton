@@ -44,11 +44,21 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
           Printf.printf "[DEBUG] Start respond_string w/ size=%d\n" (String.length body);
           S.respond_string ~status:`OK ~body ()
         with exn ->
-          let id_sexp_str = (Re_str.(global_replace (regexp_string "%20") " " path)) in
-          Printf.printf "------------> %s\n" id_sexp_str;
-          match STACK.TCPV4.get_state (STACK.tcpv4 stack) id_sexp_str with
-          | Some body -> S.respond_string ~status:`OK ~body ()
-          | None -> S.respond_not_found ()
+          let cmd = String.sub path 0 3 in
+          let sexp =
+                Re_str.(global_replace (regexp_string "%20") " " (replace_first (regexp_string cmd) "" path)) in
+          match cmd with
+          | "GET" -> begin
+              match STACK.get_state stack sexp with
+              | Some body -> S.respond_string ~status:`OK ~body ()
+              | None -> S.respond_not_found ()
+          end
+          | "SET" -> begin
+              match STACK.set_state stack sexp with
+              | Some body -> S.respond_string ~status:`OK ~body ()
+              | None -> S.respond_not_found ()
+          end
+          | _ -> S.respond_not_found ()
     in
 
     (* HTTP callback *)
@@ -60,13 +70,15 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
       let cid = Cohttp.Connection.to_string conn_id in
       C.log c (Printf.sprintf "conn %s closed" cid)
     in
-    C.log c "[DEBUG] Start listening on port 80...";
+    let accept spec flow =
+      let chan = Http1_channel.create flow in
+      Http1.Server_core.callback spec chan chan
+    in
     let listen spec =
-      STACK.listen_tcpv4 ~port:80 stack (fun flow ->
-        let chan = Http1_channel.create flow in
-        Http1.Server_core.callback spec chan chan
-      );
-    STACK.listen stack in
+      STACK.listen_tcpv4 ~port:80 stack (accept spec);
+      STACK.listen stack 
+    in
+    C.log c "[DEBUG] Start listening on port 80...";
     listen { S.callback; conn_closed }
 
 end
