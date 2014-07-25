@@ -4,9 +4,10 @@
 local_ip=10.0.0.2
 local_port=80
 dest_ip=10.0.0.1
+state_fn=state.dat
 
 if [ $# -eq 0 ]; then
-	echo "Usage: $0 <cmd:get getset> [client port]"
+	echo "Usage: $0 <cmd:get,set,getset> [client_port (if get|getset), state_file (if set)]"
 	exit
 fi
 cmd=$1
@@ -16,7 +17,11 @@ netstat -na | grep $local_ip:$local_port
 
 # arg: client port number
 if [ $# -gt 1 ]; then
-	dest_port=$2
+	if [[ "$cmd" =~ "get" ]]; then
+		dest_port=$2
+	else
+		state_fn=$2
+	fi
 else
 	# pick the last (perhaps recent) established connection
 	established_conn=`netstat -na | grep $local_ip:$local_port | grep ESTABLISHED | tail -1`
@@ -27,13 +32,20 @@ fi
 
 id_sexp_str="GET((dest_port%20$dest_port)(dest_ip%20$dest_ip)(local_port%20$local_port)(local_ip%20$local_ip))"
 
-echo "## client:$dest <-> server:$local_ip:$local_port" 
-echo "## id_sexp_str:$id_sexp_str" 
-echo "## get state result:"
-state_sexp_str=`wget -q -O - $local_ip/$id_sexp_str`
-echo $state_sexp_str
-if [ $cmd = "getset" ]; then
-	echo "## set state result:"
+echo "## client:$dest_ip:$dest_port <-> server:$local_ip:$local_port" 
+if [[ "$cmd" =~ "get" ]]; then
+	echo "## id_sexp_str:$id_sexp_str" 
+	echo "## get state result:"
+	wget -q -O $state_fn $local_ip/$id_sexp_str
+	cat $state_fn
+	echo
+fi
+if [[ "$cmd" =~ "set" ]]; then
+	if [ ! -e $state_fn ]; then
+		echo "Error: $state_fn not found"
+		exit
+	fi
+	state_sexp_str=`cat $state_fn`
 	wget -q -O - "$local_ip/SET$state_sexp_str"
 fi
 echo
