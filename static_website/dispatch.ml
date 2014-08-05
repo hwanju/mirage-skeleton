@@ -34,8 +34,8 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
     in
 
     (* dispatch non-file URLs *)
-    let rec dispatcher = function
-      | [] | [""] -> dispatcher ["index.html"] 
+    let rec dispatcher req_body = function
+      | [] | [""] -> dispatcher req_body ["index.html"] 
       | segments ->
         let path = String.concat "/" segments in
         try_lwt
@@ -45,18 +45,19 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
           S.respond_string ~status:`OK ~body ()
         with exn ->
           let cmd = String.sub path 0 3 in
-          let sexp =
-                Re_str.(global_replace (regexp_string "%20") " " (replace_first (regexp_string cmd) "" path)) in
+          let sexp str =
+            Re_str.(global_replace (regexp_string "%20") " " (replace_first (regexp_string cmd) "" str)) in
           match cmd with
           | "GET" -> begin
-              match STACK.get_state stack sexp with
-              | Some body -> S.respond_string ~status:`OK ~body ()
-              | None -> S.respond_not_found ()
+            match STACK.get_state stack (sexp path) with
+            | Some body -> S.respond_string ~status:`OK ~body ()
+            | None -> S.respond_not_found ()
           end
           | "SET" -> begin
-              match STACK.set_state stack sexp with
-              | Some body -> S.respond_string ~status:`OK ~body ()
-              | None -> S.respond_not_found ()
+            lwt str = Cohttp_lwt_body.to_string req_body in
+            match STACK.set_state stack (sexp str) with
+            | Some body -> S.respond_string ~status:`OK ~body ()
+            | None -> S.respond_not_found ()
           end
           | _ -> S.respond_not_found ()
     in
@@ -64,7 +65,7 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
     (* HTTP callback *)
     let callback conn_id request body =
       let uri = S.Request.uri request in
-      dispatcher (split_path uri)
+      dispatcher body (split_path uri)
     in
     let conn_closed conn_id () =
       let cid = Cohttp.Connection.to_string conn_id in

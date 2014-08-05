@@ -45,7 +45,6 @@ if [[ "$cmd" =~ "set" ]]; then
 		echo "Error: $state_fn not found"
 		exit
 	fi
-	state_sexp_str=`cat $state_fn`
-	wget -q -O - "$local_ip/SET$state_sexp_str"
+	wget -q -O - "$local_ip/SET" --post-file=$state_fn
 fi
 echo
