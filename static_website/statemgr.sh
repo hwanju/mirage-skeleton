@@ -37,7 +37,7 @@ if [[ "$cmd" =~ "get" ]]; then
 	echo "## id_sexp_str:$id_sexp_str" 
 	echo "## get state result:"
 	wget -q -O $state_fn $local_ip/$id_sexp_str
-	cat $state_fn
+	[ "$cmd" = "get" ] && cat $state_fn
 	echo
 fi
 if [[ "$cmd" =~ "set" ]]; then
