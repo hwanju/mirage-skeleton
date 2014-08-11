@@ -24,8 +24,8 @@ if [ $# -gt 1 ]; then
 	fi
 else
 	# pick the last (perhaps recent) established connection
-	established_conn=`netstat -na | grep $local_ip:$local_port | grep ESTABLISHED | tail -1`
-	dest=`echo $established_conn | awk '{print $4}'`
+	established_conn=`netstat -na | grep -E "$local_ip[:.]$local_port" | grep ESTABLISHED | tail -1`
+  dest=`echo $established_conn | awk '{print $4}' | sed 's/\.\([0-9]*\)$/:\1/g'`
 	dest_ip=`echo $dest | cut -d: -f1` 
 	dest_port=`echo $dest | cut -d: -f2` 
 fi
@@ -37,6 +37,13 @@ if [[ "$cmd" =~ "get" ]]; then
 	echo "## id_sexp_str:$id_sexp_str" 
 	echo "## get state result:"
 	wget -q -O $state_fn $local_ip/$id_sexp_str
+
+	# XXX: for testing: will be changed by server-side parsing
+	id=`cat $state_fn | perl -e '$state = <>; print "$1" if $state =~ /s_id(.+local_ip [0-9\.]+\)\))/;'`
+	echo -n "$id###" > .$state_fn
+	cat $state_fn >> .$state_fn
+	mv .$state_fn $state_fn
+
 	[ "$cmd" = "get" ] && cat $state_fn
 	echo
 fi

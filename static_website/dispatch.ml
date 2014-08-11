@@ -8,7 +8,7 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
   module Http1 = HTTP.Make(Http1_channel)
   module S = Http1.Server
 
-  type conntbl = (string, (Http1_channel.t * Http1_channel.t)) Hashtbl.t
+  type conntbl = (string, (Http1_channel.t option * Http1_channel.t option * string)) Hashtbl.t
 
   let start c fs stack =
 
@@ -50,14 +50,14 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
           let cmd = String.sub path 0 3 in
           let sexp str =
             Re_str.(global_replace (regexp_string "%20") " " (replace_first (regexp_string cmd) "" str)) in
-          let state_delim = "$$$" in  (* XXX *)
+          let state_delim = "###" in  (* XXX *)
           match cmd with
           | "GET" -> begin
-            let id = sexp path in
-            match STACK.get_state stack id with
+            let flow_id = sexp path in
+            match STACK.get_state stack flow_id with
             | Some stack_state -> 
               (* TODO: error handling *)
-              let ic, oc = Hashtbl.find conns id in
+              let Some ic, Some oc, _= Hashtbl.find conns flow_id in
               let chan_state = Http1_channel.get_state ic oc in
               (*let body = Re_str.(replace_first (regexp_string "s_app_state()") * ("s_app_state(\"" ^ chan_state ^ "\")") stack_state) in*)
               let body = stack_state ^ state_delim ^ chan_state in
@@ -66,9 +66,11 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
           end
           | "SET" -> begin
             lwt state = Cohttp_lwt_body.to_string req_body in
-            let stack_state::[chan_state] = Re_str.(split (regexp_string state_delim) state) in
+            let [flow_id;stack_state;chan_state] = Re_str.(split (regexp_string state_delim) state) in
+            Printf.printf "-------- ID: %s\n" flow_id;
             Printf.printf "-------- STACK: %s\n" stack_state;
             Printf.printf "-------- CHAN: %s\n" chan_state;
+            Hashtbl.replace conns flow_id (None, None, chan_state);
             match STACK.set_state stack (sexp stack_state) with
             | Some body -> S.respond_string ~status:`OK ~body ()
             | None -> S.respond_not_found ()
@@ -85,10 +87,20 @@ module Main (C:CONSOLE) (FS:KV_RO) (STACK: V1_LWT.STACKV4) = struct
       let cid = Cohttp.Connection.to_string conn_id in
       C.log c (Printf.sprintf "conn %s closed" cid)
     in
+    let restore_chan flow_id ic oc =
+      try
+        match Hashtbl.find conns flow_id with
+        | (None, None, chan_state) ->
+            Printf.printf "------ RESTORE CHAN: %s\n" chan_state;
+            Http1_channel.set_state ic oc chan_state
+        | _ -> ()
+      with Not_found -> ()
+    in
     let accept spec flow =
       let chan = Http1_channel.create flow in
       let flow_id = STACK.TCPV4.string_of_id flow in
-      Hashtbl.replace conns flow_id (chan, chan);
+      restore_chan flow_id chan chan;
+      Hashtbl.replace conns flow_id (Some chan, Some chan, "");
       Http1.Server_core.callback spec chan chan
     in
     let listen spec =
