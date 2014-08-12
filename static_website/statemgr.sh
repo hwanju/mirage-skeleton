@@ -44,7 +44,6 @@ if [[ "$cmd" =~ "get" ]]; then
 	cat $state_fn >> .$state_fn
 	mv .$state_fn $state_fn
 
-	[ "$cmd" = "get" ] && cat $state_fn
 	echo
 fi
 if [[ "$cmd" =~ "set" ]]; then
